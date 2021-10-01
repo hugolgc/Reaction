@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Créer par @hugolgc</title>
+  <link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet" />
+</head>
+<body id="app" class="flex font-mono">
+  
+
+<aside class="h-screen flex-none p-2 bg-gray-50 border-4 border-gray-100 overflow-auto">
+  <table class="table-auto text-xl font-semibold">
+    <tbody>
+      <tr
+        v-for="(player, index) in setPlayers"
+        :key="index"
+      >
+        <td class="px-3 py-1.5 text-gray-400">{{ index + 1 }}</td>
+        <td class="px-3 py-1.5">{{ player.name }}</td>
+        <td v-if="player.time === 'DNF'" class="px-3 py-1.5 text-gray-400">{{ player.time }}</td>
+        <td v-else class="px-3 py-1.5 text-gray-400">{{ Math.floor(player.time / 100) }}:{{ twoDigits(player.time % 100) }}</td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+
+
+<main class="flex flex-auto justify-center items-center">
+  <form
+    @submit.prevent="setUser"
+    v-if="!user.state"
+    method="post"
+    class="space-y-4"
+  >
+    <input
+      type="text"
+      v-model="user.name"
+      class="block w-72 h-12 px-4 bg-gray-50 border-2 border-gray-100 font-semibold rounded-xl"
+      minlength="4"
+      maxlength="50"
+      placeholder="Pseudo"
+      required
+    />
+    <button class="block w-72 h-12 bg-red-50 border-2 border-red-100 text-red-400 font-semibold rounded-xl">Jouer</button>
+  </form>
+  <div v-else class="space-y-6">
+    <header class="flex space-x-6">
+      <div
+        v-for="(light, index) in lights"
+        :key="index"
+        class="w-12 h-12 rounded-full"
+        :class="[ light ? 'bg-red-400' : 'bg-gray-200' ]"
+      ></div>
+    </header>
+    <section
+      @click="stop()"
+      class="w-full h-48 flex border-4 rounded-xl cursor-pointer"
+      :class="[ state ? 'bg-red-50 border-red-400' : 'bg-gray-50 border-gray-100' ]"
+    >
+      <p
+        @click="stop()"
+        class="m-auto text-4xl font-semibold"
+        :class="[ state ? 'text-red-400' : 'text-gray-400' ]"
+      >{{ Math.floor(time / 100) }}:{{ twoDigits(time % 100) }}</p>
+    </section>
+  </div>
+</main>
+
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://unpkg.com/vue@next"></script>
+<script>
+
+
+Vue.createApp({
+  data() {
+    return {
+      socket: io(),
+      user: {
+        name: '',
+        state: false,
+        id: null
+      },
+      time: 0,
+      state: false,
+      lights: [false, false, false, false, false],
+      play: null,
+      players: []
+    }
+  },
+  methods: {
+    twoDigits(number) {
+      return number < 10 ? '0' + number : number;
+    },
+    ready() {
+      const lightsEngine = setInterval(() => {
+        for (let i = 0; i < this.lights.length; i++) {
+          if (!this.lights[i]) {
+            this.lights[i] = !this.lights[i]
+            break
+          }
+        }
+        if (this.lights.every(x => x === true)) {
+          clearInterval(lightsEngine)
+          setTimeout(() => this.start(), Math.floor(Math.random() * 10000))
+        }
+      }, 1000)
+    },
+    start() {
+      if (this.lights.every(x => x === true)) {
+        this.state = true
+        this.lights = [false, false, false, false, false]
+        this.play = setInterval(() => this.time++, 10)
+      } else this.ready()
+    },
+    stop() {
+      if (this.state) {
+        clearInterval(this.play)
+        this.state = false
+        this.socket.emit('newTime', this.time)
+        setTimeout(() => {
+          this.time = 0
+          this.ready()
+        }, 3750)
+      } else this.lights = [false, false, false, false, false]
+    },
+    setUser() {
+      this.socket.emit('setUser', this.user.name)
+      this.user.state = true
+      this.ready()
+    }
+  },
+  computed: {
+    setPlayers() {
+      return this.players.sort((a, b) => a.time - b.time)
+    }
+  },
+  mounted() {
+    this.socket.on('connection', id => { this.user.id = id })
+    this.socket.on('setRanking', players => { this.players = players })
+  }
+}).mount('#app')
+
+
+</script>
+</body>
+</html>
